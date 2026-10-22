@@ -1,0 +1,11 @@
+# Node / pnpm 本地安装产物
+node_modules/
+.pnpm-store/
+
+# 构建输出
+build/
+dist/
+
+# 环境变量与本地凭据
+.env
+.env.*

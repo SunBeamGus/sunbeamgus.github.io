@@ -9,4 +9,12 @@ dist/
 # 环境变量与本地凭据（仅忽略真实 .env；.env.example 作为模板会被提交）
 .env
 
+
+# ---------- 编辑器 / IDE ----------
+.vs/
 .vscode/
+.idea/
+*.user
+*.suo
+*.sln.docstates
+*.code-workspace

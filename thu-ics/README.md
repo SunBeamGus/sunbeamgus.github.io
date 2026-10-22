@@ -1,92 +1,93 @@
 # thu-schedule-ics
 
-使用 [`@thu-info/lib`](https://www.npmjs.com/package/@thu-info/lib) 自动读取清华大学
-信息门户的**课表**，生成可供日历 App 订阅的 `.ics`（iCalendar）文件，并可通过
-GitHub Actions 定时托管到 GitHub Pages。
+使用 [`@thu-info/lib`](https://www.npmjs.com/package/@thu-info/lib) 在**本地**自动读取
+清华大学信息门户的课表，生成可供日历 App 订阅的 `.ics` 文件，并推送到 GitHub Pages
+托管订阅。
+
+> **为什么是本地？** 清华的登录服务（`oauth.tsinghua.edu.cn`）只对国内网络开放，
+> GitHub 托管的 Actions runner 在海外无法访问，因此生成课表这步必须在你的电脑上运行。
 
 ## 功能
 
 - 登录清华大学信息门户，调用 `getSchedule()` 抓取本学期（或指定学期）课表；
 - 把「第 N 周 + 星期 X + 第 a–b 节」映射为具体日期时间，包含教室与考试安排；
 - 忽略你在 THUInfo 中**删除/隐藏**的时间片，排除自定义日程（可用开关保留）；
-- 输出标准 iCalendar 2.0（`VERSION:2.0` + `METHOD:PUBLISH`，UTC 时间），兼容
-  Google / Apple / Outlook 等主流日历。
+- 输出标准 iCalendar 2.0（UTC 时间），兼容 Google / Apple / Outlook 等主流日历。
 
-## 目录结构
+## 快速开始
 
-```
-sunbeamgus.github.io/
-├── .github/workflows/schedule-ics.yml   # 定时抓取 + 提交 .ics
-├── thu-ics/
-│   ├── src/
-│   │   ├── index.ts    # 入口：登录 → 抓取 → 写文件
-│   │   ├── ics.ts      # 数据结构 + ICS 生成
-│   │   ├── periods.ts  # 节次 ↔ 时间映射（源自 THUInfo 官方 app）
-│   │   └── totp.ts     # 可选 TOTP 两步验证
-│   ├── package.json
-│   └── tsconfig.json
-└── res/courses.ics      # 生成结果（由工作流提交，供 Pages 订阅）
-```
+前置：Node.js ≥ 20、Git（并已在本仓库配置好代理）。
 
-## 本地运行
+1. **填写凭据**（`.env` 已被 `.gitignore` 忽略，不会被提交）：
 
-前置：Node.js ≥ 20。
+   ```powershell
+   copy thu-ics\.env.example thu-ics\.env
+   # 用记事本打开 thu-ics\.env，填入 THU_USER_ID / THU_PASSWORD
+   ```
 
-```bash
-cd thu-ics
-npm install
+2. **生成并推送**（在仓库根目录执行）：
 
-# Windows (PowerShell)
-$env:THU_USER_ID="你的学号"
-$env:THU_PASSWORD="你的密码"
-npm run generate
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File .\thu-ics\update.ps1
+   ```
 
-# macOS / Linux (bash)
-THU_USER_ID=你的学号 THU_PASSWORD=你的密码 npm run generate
-```
+   脚本会自动：首次 `npm install` → 直连清华生成 `res/courses.ics` → 用 git 代理
+   提交并推送到 GitHub。
 
-运行后会在 `res/` 目录生成 `courses.ics`，直接用日历 App 打开即可导入。
+   也可以跳过脚本、在 `thu-ics` 目录直接运行 `npm run generate`（`index.ts` 会读取
+   `.env`），只生成不推送。
 
-## 环境变量
-
-| 变量 | 必填 | 说明 |
-| --- | --- | --- |
-| `THU_USER_ID` | 是 | 学号（信息门户账号） |
-| `THU_PASSWORD` | 是 | 信息门户密码 |
-| `THU_TOTP_SECRET` | 否 | TOTP 两步验证密钥（Base32）。未开启两步验证则无需设置 |
-| `THU_SEMESTER_INDEX` | 否 | `nextSemesterList` 的下标，用于抓取下学期课表；留空 = 当前学期 |
-| `THU_INCLUDE_CUSTOM` | 否 | `1`/`true` 时保留自定义日程，默认排除 |
-| `THU_CALNAME` | 否 | 日历名称，默认「清华大学课表（学期名）」 |
-| `THU_OUTPUT` | 否 | 输出文件路径，默认 `<仓库>/res/courses.ics` |
-
-## 托管到 GitHub Pages（自动订阅）
-
-1. **启用 Pages**：仓库 Settings → Pages，Source 选 `Deploy from a branch`，分支选
-   `main`（或你的默认分支）、目录 `/ (root)`。
-2. **配置密钥**：Settings → Secrets and variables → Actions，新增 Repository secrets：
-   - `THU_USER_ID`：你的学号
-   - `THU_PASSWORD`：你的密码
-   - `THU_TOTP_SECRET`：若开启了 TOTP 两步验证则填 Base32 密钥，否则可留空
-
-   可选 Repository variables（非敏感配置）：
-   - `THU_INTENSIVE`：设为 `1` 时每小时刷新一次（选课期间用），否则仅每天刷新
-   - `THU_SEMESTER_INDEX`：要抓取的学期下标（留空 = 当前学期）
-3. **手动触发一次**：Actions → 「Generate THU Schedule ICS」 → Run workflow，确认成功。
-4. **订阅**：日历 App 订阅 URL：
+3. **订阅**：日历 App 订阅 URL：
 
    ```
    https://<你的用户名>.github.io/res/courses.ics
    ```
 
-   例如本项目对应 `https://sunbeamgus.github.io/res/courses.ics`，一键订阅链接为
-   `webcal://sunbeamgus.github.io/res/courses.ics`（已在首页 `index.html` 提供入口）。
+   例如 `https://sunbeamgus.github.io/res/courses.ics`，一键订阅
+   `webcal://sunbeamgus.github.io/res/courses.ics`（首页 `index.html` 已有入口）。
 
-### 刷新频率
+## 定时自动运行（可选）
 
-工作流默认**每天 UTC 20:00（北京时间次日 04:00）**刷新一次；同时每小时触发一次，
-但只有把 Repository variable `THU_INTENSIVE` 设为 `1`（选课期间）时，每小时触发才会
-真正抓取并提交，否则直接跳过。手动 `workflow_dispatch` 总是执行。频率可在
-`.github/workflows/schedule-ics.yml` 中调整 `cron`。
+用 Windows 任务计划程序每天自动执行（需管理员权限）：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\thu-ics\register-task.ps1
+```
+
+取消：`Unregister-ScheduledTask -TaskName "THU Schedule ICS" -Confirm:$false`
+
+> 前提：任务运行时机器需开机；首次 `git push` 已通过 Git Credential Manager 交互
+> 登录（凭据会被缓存，之后可无人值守）。
+
+## 目录结构
+
+```
+sunbeamgus.github.io/
+├── thu-ics/
+│   ├── src/
+│   │   ├── index.ts        # 入口：读取 .env → 登录 → 抓取 → 写文件
+│   │   ├── ics.ts          # 数据结构 + ICS 生成
+│   │   ├── periods.ts      # 节次 ↔ 时间映射（源自 THUInfo 官方 app）
+│   │   └── totp.ts         # 可选 TOTP 两步验证
+│   ├── update.ps1          # 本地一键：生成 + 提交 + 推送
+│   ├── register-task.ps1   # 注册 Windows 计划任务（可选）
+│   ├── .env.example        # 凭据模板（复制为 .env 后填写）
+│   ├── package.json
+│   └── tsconfig.json
+└── res/courses.ics          # 生成结果（供 Pages 订阅）
+```
+
+## 环境变量（写在 `thu-ics/.env` 或系统环境变量）
+
+| 变量 | 必填 | 说明 |
+| --- | --- | --- |
+| `THU_USER_ID` | 是 | 学号（信息门户账号） |
+| `THU_PASSWORD` | 是 | 信息门户密码 |
+| `THU_TOTP_SECRET` | 否 | TOTP 两步验证密钥（Base32） |
+| `THU_SEMESTER_INDEX` | 否 | 抓取下学期课表（`nextSemesterList` 下标）；留空 = 当前学期 |
+| `THU_INCLUDE_CUSTOM` | 否 | `1`/`true` 时保留自定义日程，默认排除 |
+| `THU_CALNAME` | 否 | 日历名称，默认「清华大学课表（学期名）」 |
+| `THU_OUTPUT` | 否 | 输出文件路径，默认 `<仓库>/res/courses.ics` |
 
 ## 节次时间表
 
@@ -106,12 +107,11 @@ THU_USER_ID=你的学号 THU_PASSWORD=你的密码 npm run generate
 
 ## 注意事项
 
-- **隐私**：`.ics` 会被公开托管，任何拿到 URL 的人都能看到你的课表。请确认可接受，
-  或改为在私有仓库托管。
+- **隐私**：`.ics` 会公开托管，任何拿到 URL 的人都能看到你的课表。请确认可接受，
+  或改为私有仓库托管。
 - **两步验证**：`THU_TOTP_SECRET` 假定为标准的 TOTP（SHA-1、6 位、30 秒）。
-  若学校使用其它方式（微信/短信）且无法自动化，则 GitHub Actions 无法无人值守登录，
-  只能本地手动运行。
-- **登录稳定性**：从 GitHub Actions 的海外 IP 登录可能触发安全策略或偶尔失败；
-  脚本对「读取课表」做了 3 次重试，必要时可手动重新触发工作流。
+  若学校使用其它方式（微信/短信）无法自动化，则只能手动运行。
+- **代理模式**：生成课表需直连清华内网。若你的代理是「全局/TUN 模式」把
+  `*.tsinghua.edu.cn` 也劫持到海外，会导致超时——请在代理软件中把该域名设为直连。
 - 本工具基于 `@thu-info/lib@3.15.2`，该库许可为 Business Source License 1.1，
   仅供个人学习使用。

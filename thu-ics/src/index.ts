@@ -1,5 +1,5 @@
 import { InfoHelper } from "@thu-info/lib";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -12,6 +12,33 @@ import {
 import { totp } from "./totp.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
+
+/**
+ * 从 thu-ics/.env 读取本地凭据（仅当对应环境变量尚未设置时生效）。
+ * 这样既可直接 `npm run generate`，也可由 update.ps1 调用，无需额外传参。
+ */
+function loadDotEnv(): void {
+	const envPath = resolve(here, "..", ".env"); // thu-ics/.env
+	if (!existsSync(envPath)) {
+		return;
+	}
+	for (const line of readFileSync(envPath, "utf8").split(/\r?\n/)) {
+		const trimmed = line.trim();
+		if (!trimmed || trimmed.startsWith("#")) {
+			continue;
+		}
+		const m = trimmed.match(/^([^=]+)=(.*)$/);
+		if (!m) {
+			continue;
+		}
+		const key = m[1].trim();
+		if (process.env[key] !== undefined) {
+			continue;
+		}
+		process.env[key] = m[2].trim().replace(/^["']|["']$/g, "");
+	}
+}
+loadDotEnv();
 
 function sleep(ms: number): Promise<void> {
 	return new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
@@ -50,7 +77,7 @@ async function main(): Promise<void> {
 	const password = process.env.THU_PASSWORD;
 	if (!userId || !password) {
 		throw new Error(
-			"缺少登录凭据：请设置环境变量 THU_USER_ID 与 THU_PASSWORD。",
+			"缺少登录凭据：请在 thu-ics/.env 中设置 THU_USER_ID 与 THU_PASSWORD（或通过环境变量提供）。",
 		);
 	}
 
@@ -63,9 +90,9 @@ async function main(): Promise<void> {
 			hasTotp ? "totp" : undefined;
 		helper.twoFactorAuthHook = async () => totp(totpSecret);
 	}
-	// 自动化环境下自动信任新设备（每次 CI 都是全新指纹）。
+	// 本地运行，自动信任本设备指纹。
 	helper.trustFingerprintHook = async () => true;
-	helper.trustFingerprintNameHook = async () => "GitHub Actions";
+	helper.trustFingerprintNameHook = async () => "本地运行";
 
 	console.log(`🔐 正在以 ${userId} 登录清华大学信息门户…`);
 	await helper.login({ userId, password });

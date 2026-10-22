@@ -8,3 +8,5 @@ dist/
 
 # 环境变量与本地凭据（仅忽略真实 .env；.env.example 作为模板会被提交）
 .env
+
+.vscode/
